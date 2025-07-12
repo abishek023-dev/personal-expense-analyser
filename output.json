@@ -1,0 +1,53 @@
+[
+  {
+    "desc": "UPI/HEMA",
+    "type": "CR",
+    "amount": "186.00"
+  },
+  {
+    "desc": "jayadevappagou/UPI/BANK",
+    "type": "CR",
+    "amount": "48edb80d*****ec2baa7"
+  },
+  {
+    "desc": "Crimson/UPI/YES BANK",
+    "type": "DR",
+    "amount": "100.00"
+  },
+  {
+    "desc": "PASH/paytmqr6b5cu@/UPI/YES BANK",
+    "type": "CR",
+    "amount": "161.00"
+  },
+  {
+    "desc": "Mi/**********@kotak",
+    "type": "CR",
+    "amount": "200.00"
+  },
+  {
+    "desc": "RAMACHANDR/**********",
+    "type": "DR",
+    "amount": "140.00",
+    "bank": "ICIab84a06c065c4******"
+  },
+  {
+    "desc": "ICIff9ba74b3c47",
+    "type": "CR",
+    "bank": "ICI"
+  },
+  {
+    "desc": "an/paytm.s1ipyl1@/UPI",
+    "type": "CR",
+    "bank": "YES BANK"
+  },
+  {
+    "desc": "PASH",
+    "type": "CR",
+    "amount": "161.00"
+  },
+  {
+    "desc": "Mahi/************/ICIc21dce145",
+    "type": "CR",
+    "bank": "ICI"
+  }
+]
