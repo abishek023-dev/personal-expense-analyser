@@ -19,7 +19,7 @@ def extract_masked_text_from_pdf(pdf_path, password):
         with open(pdf_path, 'rb') as file:
             reader = PyPDF2.PdfReader(file)
             if reader.is_encrypted:
-                if reader.decrypt(password) != 1:
+                if not reader.decrypt(password):
                     print("❌ Wrong password!")
                     return []
             for page in reader.pages:
@@ -37,6 +37,7 @@ def extract_masked_text_from_pdf(pdf_path, password):
 
 # 🤖 Send to Gemini API
 def get_transactions_from_ai(masked_lines):
+    text_content = '\n'.join(masked_lines)
     prompt = f"""
 Extract all bank transactions from the following lines and return only valid JSON list. 
 
@@ -48,7 +49,7 @@ Each item should include:
 Only return the JSON array, without any explanation or formatting.
 
 Text:
-{'\n'.join(masked_lines)}
+{text_content}
 """
 
     headers = {
@@ -125,4 +126,4 @@ def process_pdf_and_send(pdf_path, password):
 
 # ✅ Run
 if __name__ == "__main__":
-    process_pdf_and_send("bank_st1.pdf", "NAIS1402")
+    process_pdf_and_send("bank_st2.pdf", "NAIS1402")
