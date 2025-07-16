@@ -2,16 +2,11 @@ import PyPDF2
 import re
 import os
 import json
-from openai import OpenAI
 from dotenv import load_dotenv
+import requests
 
 load_dotenv()
-HF_TOKEN = os.environ.get("HF_TOKEN")
-
-client = OpenAI(
-    base_url="https://router.huggingface.co/featherless-ai/v1",
-    api_key=HF_TOKEN,
-)
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 # 🔐 Mask long digits (like account no, UPI IDs)
 def mask_sensitive_digits(text):
@@ -40,30 +35,46 @@ def extract_masked_text_from_pdf(pdf_path, password):
         print(f"❌ Error reading PDF: {e}")
         return []
 
-# 🤖 Send to LLM
+# 🤖 Send to Gemini API
 def get_transactions_from_ai(masked_lines):
     prompt = f"""
-Extract bank transactions from the following lines and return them in JSON format.
+Extract all bank transactions from the following lines and return only valid JSON list. 
 
-Each item should have:
+Each item should include:
 - desc
 - type (Credit/Debit)
 - amount
 
-Only return valid JSON list, no explanation.
+Only return the JSON array, without any explanation or formatting.
 
 Text:
-{'\n'.join(masked_lines[:30])}
+{'\n'.join(masked_lines)}
 """
 
+    headers = {
+        "Content-Type": "application/json",
+        "X-goog-api-key": GEMINI_API_KEY
+    }
+
+    data = {
+        "contents": [
+            {
+                "parts": [{"text": prompt}]
+            }
+        ]
+    }
+
     try:
-        completion = client.chat.completions.create(
-            model="HuggingFaceH4/zephyr-7b-beta",
-            messages=[{"role": "user", "content": prompt}],
-        ) 
-        print(completion.choices[0].message.content)
-        response_text = completion.choices[0].message.content
-        return response_text
+        response = requests.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+            headers=headers,
+            json=data
+        )
+        response.raise_for_status()
+        result = response.json()
+        model_output = result['candidates'][0]['content']['parts'][0]['text']
+        print("🧠 Gemini Output:\n", model_output)
+        return model_output
     except Exception as e:
         print(f"❌ API error: {e}")
         return ""
@@ -71,20 +82,20 @@ Text:
 # 🧪 Try extracting JSON
 def extract_json(response_text):
     try:
-        # ✅ Extract all JSON arrays from response
-        json_arrays = re.findall(r'\[\s*{.*?}\s*\]', response_text, re.DOTALL)
+        start_idx = response_text.find("[")
+        end_idx = response_text.rfind("]") + 1
+        if start_idx == -1 or end_idx == -1:
+            print("❌ No valid JSON block found.")
+            return []
 
-        # ✅ Parse all arrays and combine into one list
-        all_transactions = []
-        for array_str in json_arrays:
-            try:
-                items = json.loads(array_str)
-                all_transactions.extend(items)
-            except Exception as e:
-                print(f"⚠️ Skipping one block due to error: {e}")
+        json_block = response_text[start_idx:end_idx]
 
-        return all_transactions
-    except Exception as e:
+        # Fix bad backslashes
+        json_block = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', json_block)
+
+        transactions = json.loads(json_block)
+        return transactions
+    except json.JSONDecodeError as e:
         print(f"❌ JSON parsing failed: {e}")
         return []
 
@@ -101,7 +112,7 @@ def process_pdf_and_send(pdf_path, password):
     if not masked_lines:
         return
 
-    print("🚀 Sending to Hugging Face router...")
+    print("🚀 Sending to Gemini API...")
     response = get_transactions_from_ai(masked_lines)
     if not response:
         return
