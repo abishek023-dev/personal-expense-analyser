@@ -1,10 +1,9 @@
+import PyPDF2
 import re
 import os
 import json
-import requests
-import pdfplumber
-import pikepdf
 from dotenv import load_dotenv
+import requests
 
 load_dotenv()
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -13,19 +12,17 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 def mask_sensitive_digits(text):
     return re.sub(r'\d{4,}', lambda m: '*' * len(m.group()), text)
 
-# 📄 Read and clean PDF (Updated with pikepdf + pdfplumber)
+# 📄 Read and clean PDF
 def extract_masked_text_from_pdf(pdf_path, password):
-    temp_path = "unlocked_temp.pdf"
     all_lines = []
-
     try:
-        # Decrypt and save temporary unlocked PDF
-        with pikepdf.open(pdf_path, password=password) as pdf:
-            pdf.save(temp_path)
-
-        # Read from the unlocked PDF
-        with pdfplumber.open(temp_path) as pdf:
-            for page in pdf.pages:
+        with open(pdf_path, 'rb') as file:
+            reader = PyPDF2.PdfReader(file)
+            if reader.is_encrypted:
+                if not reader.decrypt(password):
+                    print("❌ Wrong password!")
+                    return []
+            for page in reader.pages:
                 text = page.extract_text()
                 if text:
                     lines = text.split('\n')
@@ -35,11 +32,12 @@ def extract_masked_text_from_pdf(pdf_path, password):
         print(f"✅ Read {len(all_lines)} lines from PDF.")
         return all_lines
     except Exception as e:
-        print("❌ Incorrect password or unable to decrypt. Getting this:", e)
+        print(f"❌ Error reading PDF: {e}")
         return []
 
 # 🤖 Send to Gemini API
 def get_transactions_from_ai(masked_lines):
+    text_content = '\n'.join(masked_lines)
     prompt = f"""
 Extract all bank transactions from the following lines and return only valid JSON list. 
 
@@ -51,7 +49,7 @@ Each item should include:
 Only return the JSON array, without any explanation or formatting.
 
 Text:
-{'\n'.join(masked_lines)}
+{text_content}
 """
 
     headers = {
@@ -128,4 +126,4 @@ def process_pdf_and_send(pdf_path, password):
 
 # ✅ Run
 if __name__ == "__main__":
-    process_pdf_and_send("bank_st1.pdf", "NAIS1402")
+    process_pdf_and_send("bank_st2.pdf", "NAIS1402")
