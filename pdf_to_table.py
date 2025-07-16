@@ -1,65 +1,36 @@
-import PyPDF2
-import csv
 import re
+import pdfplumber
+import pikepdf
 
-def extract_lines_from_pdf(pdf_path, password):
-    all_lines = []
-    with open(pdf_path, 'rb') as file:
-        reader = PyPDF2.PdfReader(file)
-        if reader.is_encrypted:
-            if reader.decrypt(password) != 1:
-                print("❌ Wrong password!")
-                return []
+def mask_sensitive_digits(text):
+    return re.sub(r'\d{4,}', lambda m: '*' * len(m.group()), text)
 
-        for page in reader.pages:
-            text = page.extract_text()
-            if text:
-                lines = text.split('\n')
-                all_lines.extend(lines)
-    return all_lines
+def extract_masked_text_pikepdf(pdf_path, password=""):
+    temp_file = "temp_unlocked.pdf"
+    try:
+        # 🛡️ Decrypt with pikepdf and save as a temp unlocked PDF
+        with pikepdf.open(pdf_path, password=password) as pdf:
+            pdf.save(temp_file)
 
-def find_schema_line(lines):
-    for i, line in enumerate(lines):
-        lower = line.lower()
-        if ("date" in lower and "amount" in lower) or \
-           ("date" in lower and ("withdrawal" in lower or "deposit" in lower)) or \
-           ("narration" in lower and "amount" in lower):
-            return i, re.split(r'\s{2,}|\t+', line.strip())  # split on large spaces/tabs
-    return -1, []
+        lines = []
+        with pdfplumber.open(temp_file) as pdf:
+            for page in pdf.pages:
+                text = page.extract_text()
+                if text:
+                    for line in text.split('\n'):
+                        line = line.strip()
+                        if line:
+                            lines.append(mask_sensitive_digits(line))
 
-def extract_table_rows(lines, start_idx, num_cols):
-    table = []
-    for line in lines[start_idx+1:]:
-        if line.strip() == "":
-            continue
-        parts = re.split(r'\s{2,}|\t+', line.strip())  # split on large space/tab
-        if len(parts) >= num_cols - 1:  # tolerate 1 missing sometimes
-            # Pad if needed
-            while len(parts) < num_cols:
-                parts.append("")
-            table.append(parts[:num_cols])
-        else:
-            # possibly footer or broken line
-            break
-    return table
+        print(f"✅ Extracted {len(lines)} lines.")
+        return lines
 
-def process_statement(pdf_path, password, output_csv="parsed_statement.csv"):
-    lines = extract_lines_from_pdf(pdf_path, password)
-    schema_index, headers = find_schema_line(lines)
+    except Exception as e:
+        print(f"❌ Failed to read PDF: {e}")
+        return []
 
-    if schema_index == -1:
-        print("❌ Could not detect schema line (no 'Date' and 'Amount' found).")
-        return
-
-    print(f"✅ Detected schema: {headers}")
-    data_rows = extract_table_rows(lines, schema_index, len(headers))
-
-    # Save to CSV
-    with open(output_csv, "w", newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow(headers)
-        writer.writerows(data_rows)
-
-    print(f"✅ Extracted {len(data_rows)} rows → saved to {output_csv}")
-
-process_statement("bank_st1.pdf", "NAIS1402")
+# ✅ Run
+if __name__ == "__main__":
+    result = extract_masked_text_pikepdf("bank_st2.pdf", "NAIS1402")
+    for line in result[:10]:
+        print(line)
