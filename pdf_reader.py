@@ -1,9 +1,10 @@
-import PyPDF2
 import re
 import os
 import json
-from dotenv import load_dotenv
 import requests
+import pdfplumber
+import pikepdf
+from dotenv import load_dotenv
 
 load_dotenv()
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -12,17 +13,19 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 def mask_sensitive_digits(text):
     return re.sub(r'\d{4,}', lambda m: '*' * len(m.group()), text)
 
-# 📄 Read and clean PDF
+# 📄 Read and clean PDF (Updated with pikepdf + pdfplumber)
 def extract_masked_text_from_pdf(pdf_path, password):
+    temp_path = "unlocked_temp.pdf"
     all_lines = []
+
     try:
-        with open(pdf_path, 'rb') as file:
-            reader = PyPDF2.PdfReader(file)
-            if reader.is_encrypted:
-                if reader.decrypt(password) != 1:
-                    print("❌ Wrong password!")
-                    return []
-            for page in reader.pages:
+        # Decrypt and save temporary unlocked PDF
+        with pikepdf.open(pdf_path, password=password) as pdf:
+            pdf.save(temp_path)
+
+        # Read from the unlocked PDF
+        with pdfplumber.open(temp_path) as pdf:
+            for page in pdf.pages:
                 text = page.extract_text()
                 if text:
                     lines = text.split('\n')
@@ -32,7 +35,7 @@ def extract_masked_text_from_pdf(pdf_path, password):
         print(f"✅ Read {len(all_lines)} lines from PDF.")
         return all_lines
     except Exception as e:
-        print(f"❌ Error reading PDF: {e}")
+        print("❌ Incorrect password or unable to decrypt. Getting this:", e)
         return []
 
 # 🤖 Send to Gemini API
